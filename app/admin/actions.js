@@ -147,3 +147,81 @@ export async function tambahProduk(prevState, formData) {
   revalidatePath("/");
   redirect("/admin");
 }
+
+export async function ubahProduk(idOrPrevState, prevStateOrFormData, maybeFormData) {
+  let id = null;
+  let data = null;
+
+  if (maybeFormData instanceof FormData) {
+    id = typeof idOrPrevState === "string" || typeof idOrPrevState === "number" ? idOrPrevState : null;
+    data = maybeFormData;
+  } else if (prevStateOrFormData instanceof FormData) {
+    data = prevStateOrFormData;
+    id = typeof idOrPrevState === "string" || typeof idOrPrevState === "number" ? idOrPrevState : null;
+  } else if (idOrPrevState instanceof FormData) {
+    data = idOrPrevState;
+  }
+
+  if (!id) {
+    id = data?.get?.("id")?.toString()?.trim();
+  }
+
+  if (!id) {
+    return { error: "ID produk tidak valid." };
+  }
+
+  const nama = data?.get?.("nama")?.toString()?.trim();
+  const hargaRaw = data?.get?.("harga")?.toString()?.trim();
+  const kategori = data?.get?.("kategori")?.toString()?.trim() || null;
+  const foto_url = data?.get?.("foto_url")?.toString()?.trim() || null;
+  const deskripsi = data?.get?.("deskripsi")?.toString()?.trim() || null;
+
+  if (!nama) {
+    return { error: "Nama produk wajib diisi." };
+  }
+
+  const harga = parseInt(hargaRaw, 10);
+  if (isNaN(harga) || harga < 0) {
+    return { error: "Harga harus berupa angka dan tidak boleh kurang dari 0." };
+  }
+
+  let dbError = null;
+
+  try {
+    const supabase = await createSessionClient();
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      return { error: "Sesi telah berakhir atau belum login. Silakan login kembali." };
+    }
+
+    const { error } = await supabase
+      .from("produk")
+      .update({
+        nama,
+        harga,
+        kategori,
+        foto_url,
+        deskripsi,
+      })
+      .eq("id", id);
+
+    if (error) {
+      dbError = error;
+    }
+  } catch (err) {
+    return { error: err.message || "Terjadi kesalahan saat menyimpan perubahan produk." };
+  }
+
+  if (dbError) {
+    return { error: dbError.message || "Gagal menyimpan perubahan ke database." };
+  }
+
+  revalidatePath("/admin");
+  revalidatePath("/");
+  revalidatePath(`/produk/${id}`);
+  redirect("/admin");
+}
